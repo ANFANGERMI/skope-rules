@@ -200,7 +200,7 @@ class SkopeRules(BaseEstimator):
 
         self.classes_ = np.unique(y)
         n_classes = len(self.classes_)
-
+        #错误输入检测
         if n_classes < 2:
             raise ValueError("This method needs samples of at least 2 classes"
                              " in the data, but the data contains only one"
@@ -249,11 +249,13 @@ class SkopeRules(BaseEstimator):
         self.estimators_features_ = []
 
         # default columns names :
+        # 此处先将属性名替换为默认的名字
         feature_names_ = [BASE_FEATURE_NAME + x for x in
                           np.arange(X.shape[1]).astype(str)]
         if self.feature_names is not None:
             self.feature_dict_ = {BASE_FEATURE_NAME + str(i): feat
                                   for i, feat in enumerate(self.feature_names)}
+        #若没有提供属性名则使用默认产生的属性名
         else:
             self.feature_dict_ = {BASE_FEATURE_NAME + str(i): feat
                                   for i, feat in enumerate(feature_names_)}
@@ -261,7 +263,7 @@ class SkopeRules(BaseEstimator):
 
         clfs = []
         regs = []
-
+        #每一个集成学习器中基学习器的深度
         self._max_depths = self.max_depth \
             if isinstance(self.max_depth, Iterable) else [self.max_depth]
 
@@ -355,6 +357,7 @@ class SkopeRules(BaseEstimator):
                 y_oob = np.array((y_oob != 0))
 
                 # Add OOB performances to rules:
+                
                 rules_from_tree = [(r, self._eval_rule_perf(r, X_oob, y_oob))
                                    for r in set(rules_from_tree)]
                 rules_ += rules_from_tree
@@ -613,20 +616,26 @@ class SkopeRules(BaseEstimator):
         return rules if len(rules) > 0 else 'True'
 
     def _eval_rule_perf(self, rule, X, y):
+        #符合该条rule的样本索引
         detected_index = list(X.query(rule).index)
         if len(detected_index) <= 1:
             return (0, 0)
+        #真实的标签
         y_detected = y[detected_index]
+        #计算正确命中的样本个数
         true_pos = y_detected[y_detected > 0].sum()
         if true_pos == 0:
             return (0, 0)
+        #计算总的正样本个数
         pos = y[y > 0].sum()
+        #返回pre以及rec
         return y_detected.mean(), float(true_pos) / pos
 
     def deduplicate(self, rules):
         return [max(rules_set, key=self.f1_score)
                 for rules_set in self._find_similar_rulesets(rules)]
 
+    
     def _find_similar_rulesets(self, rules):
         """Create clusters of rules using a decision tree based
         on the terms of the rules
@@ -646,10 +655,12 @@ class SkopeRules(BaseEstimator):
             """
             Method to find a split of rules given most represented feature
             """
+            #此时rules按照(rule, score)形式输入
             if depth == 0:
                 return rules
 
             rulelist = [rule.split(' and ') for rule, score in rules]
+            #统计出现最多的属性
             terms = [t.split(' ')[0] for term in rulelist for t in term]
             counter = Counter(terms)
             # Drop exception list
@@ -658,10 +669,13 @@ class SkopeRules(BaseEstimator):
 
             if len(counter) == 0:
                 return rules
-
+            
+            #根部是出现最多的属性
             most_represented_term = counter.most_common()[0][0]
             # Proceed to split
             rules_splitted = [[], [], []]
+            
+            #以该属性开始进行分支探索：分为<=/>/不使用该属性
             for rule in rules:
                 if (most_represented_term + ' <=') in rule[0]:
                     rules_splitted[0].append(rule)
@@ -673,17 +687,20 @@ class SkopeRules(BaseEstimator):
             # Choose best term
             return [split_with_best_feature(ruleset,
                                             depth-1,
-                                            exceptions=new_exceptions)
-                    for ruleset in rules_splitted]
+                                            exceptions=new_exceptions)for ruleset in rules_splitted]
 
         def breadth_first_search(rules, leaves=None):
+            #将嵌套结构展开
+            
             if len(rules) == 0 or not isinstance(rules[0], list):
+                #叶子规则
                 if len(rules) > 0:
                     return leaves.append(rules)
             else:
                 for rules_child in rules:
                     breadth_first_search(rules_child, leaves=leaves)
             return leaves
+        
         leaves = []
         res = split_with_best_feature(rules, self.max_depth_duplication)
         breadth_first_search(res, leaves=leaves)
